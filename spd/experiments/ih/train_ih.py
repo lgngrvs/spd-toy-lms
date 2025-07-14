@@ -266,7 +266,7 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     config = InductionHeadsTrainConfig(
         ih_model_config=InductionModelConfig(
-            vocab_size=18,
+            vocab_size=16,
             seq_len=seq_length,
             d_model=64,
             n_heads=1,
@@ -278,7 +278,7 @@ if __name__ == "__main__":
         ),
         wandb_project="induction_heads",
         steps=150000,
-        batch_size=4,
+        batch_size=8,
         lr=0.001,
         weight_decay=0.01,
         lr_schedule="constant",
