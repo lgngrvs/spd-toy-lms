@@ -50,6 +50,68 @@ class BatchedDataLoader(DataLoader[Q], Generic[Q]):
             yield batch[0], label[0]
 
 
+class InductionDataset(
+    Dataset[
+        tuple[
+            Float[Tensor, "batch seq_len"],
+            Float[Tensor, "batch 1"],
+        ]
+    ]
+):
+    """
+    Generates data of the format TTTTTSMTTT...SM
+    where T is a token from the base vocabulary, S is a special induction token,
+    and M is a memorised token that appears twice in the sequence.
+    """
+
+    def __init__(
+        self,
+        vocab_size: int,
+        seq_len: int,
+        device: str | torch.device,
+        prefix_window: int,
+        size: int = 100_000,
+    ):
+        self.vocab_size = vocab_size
+        self.seq_len = seq_len
+        self.prefix_window = prefix_window
+        self.size = size
+        self.induction_token = vocab_size + 1  # One additional token for the induction token
+        self.device = device
+        assert self.prefix_window < seq_len - 4, "S M … S M must fit."
+
+    def __len__(self) -> int:
+        return 2**31
+
+    @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
+    def generate_batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor]:
+        vocab_start = 1  # 0 is reserved for BOS
+        vocab_end = self.vocab_size + vocab_start
+
+        memorised_token = torch.randint(vocab_start, vocab_end, (batch_size, 1), dtype=torch.long)
+        tokens = torch.randint(
+            vocab_start, vocab_end, (batch_size, self.seq_len - 2), dtype=torch.long
+        )
+        memory_positions_first = torch.randint(
+            1, self.prefix_window, (batch_size, 1), dtype=torch.long
+        )
+
+        tokens.scatter_(1, memory_positions_first, self.induction_token)
+        tokens.scatter_(1, memory_positions_first + 1, memorised_token)
+
+        tokens = torch.cat(
+            (
+                torch.zeros((batch_size, 1), dtype=torch.long),  # BOS token
+                tokens,
+                self.induction_token * torch.ones((batch_size, 1), dtype=torch.long),
+            ),
+            dim=1,
+        )
+
+        # Label is the memorised token that appears twice
+        return tokens.to(self.device), memorised_token.to(self.device).squeeze(-1)
+
+
 DataGenerationType = Literal[
     "exactly_one_active",
     "exactly_two_active",
