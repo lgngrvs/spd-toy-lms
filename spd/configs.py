@@ -17,6 +17,14 @@ from spd.log import logger
 from spd.spd_types import ModelPath, Probability
 
 
+class InductionHeadTaskConfig(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+    task_name: Literal["induction_head"] = Field(
+        default="induction_head",
+        description="Task identifier for induction head training",
+    )
+
+
 class TMSTaskConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
     task_name: Literal["tms"] = Field(
@@ -243,10 +251,12 @@ class Config(BaseModel):
     )
 
     # --- Task Specific ---
-    task_config: TMSTaskConfig | ResidualMLPTaskConfig | LMTaskConfig = Field(
-        ...,
-        discriminator="task_name",
-        description="Nested task-specific configuration selected by the `task_name` discriminator",
+    task_config: TMSTaskConfig | ResidualMLPTaskConfig | LMTaskConfig | InductionHeadTaskConfig = (
+        Field(
+            ...,
+            discriminator="task_name",
+            description="Nested task-specific configuration selected by the `task_name` discriminator",
+        )
     )
 
     DEPRECATED_CONFIG_KEYS: ClassVar[list[str]] = []
