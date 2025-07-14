@@ -26,7 +26,7 @@ wandb.require("core")
 class InductionHeadsTrainConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     wandb_project: str | None = None
-    induction_head_model_cfg: InductionModelConfig
+    ih_model_config: InductionModelConfig
     steps: PositiveInt
     batch_size: PositiveInt
     lr: float
@@ -42,17 +42,19 @@ def get_run_name(
 ) -> str:
     """Generate a run name based on the config."""
     run_name = ""
-    run_name += f"induction_heads_v{config.induction_head_model_cfg.vocab_size}_seq{config.induction_head_model_cfg.seq_len}"
-    run_name += f"_heads{config.induction_head_model_cfg.n_heads}_layers{config.induction_head_model_cfg.n_layers}"
+    run_name += (
+        f"induction_heads_v{config.ih_model_config.vocab_size}_seq{config.ih_model_config.seq_len}"
+    )
+    run_name += f"_heads{config.ih_model_config.n_heads}_layers{config.ih_model_config.n_layers}"
     run_name += f"_steps{config.steps}_batch{config.batch_size}_lr{config.lr}"
-    if config.induction_head_model_cfg.use_ff:
-        run_name += f"_dmodel{config.induction_head_model_cfg.d_model}"
-        run_name += f"_ff_fanout{config.induction_head_model_cfg.ff_fanout}"
+    if config.ih_model_config.use_ff:
+        run_name += f"_dmodel{config.ih_model_config.d_model}"
+        run_name += f"_ff_fanout{config.ih_model_config.ff_fanout}"
     if config.lr_schedule:
         run_name += f"_lr_schedule_{config.lr_schedule}"
-    run_name += f"use_ff_{config.induction_head_model_cfg.use_ff}"
-    run_name += f"use_pos_encoding_{config.induction_head_model_cfg.use_pos_encoding}"
-    run_name += f"use_layer_norm_{config.induction_head_model_cfg.use_layer_norm}"
+    run_name += f"use_ff_{config.ih_model_config.use_ff}"
+    run_name += f"use_pos_encoding_{config.ih_model_config.use_pos_encoding}"
+    run_name += f"use_layer_norm_{config.ih_model_config.use_layer_norm}"
     return run_name
 
 
@@ -130,12 +132,12 @@ def get_model_and_dataloader(
     """
     Create the model and dataloader based on the config.
     """
-    model = InductionTransformer(config.induction_head_model_cfg).to(device)
+    model = InductionTransformer(config.ih_model_config).to(device)
 
     # Create the dataset and dataloader
     dataset = InductionDataset(
-        seq_len=config.induction_head_model_cfg.seq_len,
-        vocab_size=config.induction_head_model_cfg.vocab_size,
+        seq_len=config.ih_model_config.seq_len,
+        vocab_size=config.ih_model_config.vocab_size,
         device=device,
         prefix_window=config.prefix_window,
     )
@@ -280,9 +282,9 @@ def plot_attention_maps_post_training(
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     config = InductionHeadsTrainConfig(
-        induction_head_model_cfg=InductionModelConfig(
+        ih_model_config=InductionModelConfig(
             vocab_size=18,
-            seq_len=256,
+            seq_len=64,
             d_model=64,
             n_heads=1,
             n_layers=2,
