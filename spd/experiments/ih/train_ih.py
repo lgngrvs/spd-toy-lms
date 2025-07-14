@@ -255,36 +255,19 @@ def plot_attention_maps_post_training(
                 fig.savefig(out_dir / f"attention_layer{layer_index + 1}_head{head_index + 1}.png")
                 plt.close(fig)
 
-                S = avg_attn.shape[0]
-                bos = 1
-                prefix_len = (S - bos) // 2
-                rows = slice(bos + prefix_len, S)
-                cols = slice(bos, bos + prefix_len)
-
-                sub_avg = avg_attn[rows, cols]
-                sub_max = max_attn[rows, cols]
-
-                fig2, ax2 = plt.subplots(1, 2, figsize=(10, 5))
-                assert isinstance(ax2, np.ndarray), "Expected ax to be a numpy array of axes"
-                ax2[0].imshow(sub_avg, cmap="viridis", aspect="auto")
-                ax2[0].set_title("Avg – induction block")
-                ax2[1].imshow(sub_max, cmap="viridis", aspect="auto")
-                ax2[1].set_title("Max – induction block")
-                plt.colorbar(ax2[0].images[0], ax=ax2[0])
-                plt.colorbar(ax2[1].images[0], ax=ax2[1])
-                plt.tight_layout()
-                fig2.savefig(
-                    out_dir / f"attention_layer{layer_index + 1}_head{head_index + 1}_cropped.png"
-                )
-                plt.close(fig2)
-
 
 if __name__ == "__main__":
+    seq_length = 64
+    # The prefix window is the segment of the string the first induction
+    # pair is guaranteed to land within.
+    # We need 4 "spots" for the induction pair,
+    # and 1 spot for the BOS token.
+    prefix_window = 64 - 5
     device = "cuda" if torch.cuda.is_available() else "cpu"
     config = InductionHeadsTrainConfig(
         ih_model_config=InductionModelConfig(
             vocab_size=18,
-            seq_len=64,
+            seq_len=seq_length,
             d_model=64,
             n_heads=1,
             n_layers=2,
@@ -294,14 +277,14 @@ if __name__ == "__main__":
             use_pos_encoding=True,
         ),
         wandb_project="induction_heads",
-        steps=200000,
-        batch_size=8,
-        lr=0.0001,
+        steps=150000,
+        batch_size=4,
+        lr=0.001,
         weight_decay=0.01,
         lr_schedule="constant",
         seed=42,
         attention_maps_n_steps=100,
-        prefix_window=10,  # The interval of tokens the induction pair is guaranteed to land in.
+        prefix_window=prefix_window,
     )
 
     set_seed(config.seed)
