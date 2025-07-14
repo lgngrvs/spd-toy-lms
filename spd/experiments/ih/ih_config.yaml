@@ -1,0 +1,42 @@
+wandb_project: spd-induction-heads
+wandb_run_name: null
+
+pretrained_model_path: wandb:induction-heads/runs/pdulsm0r
+
+seed: 0
+
+batch_size: 512
+steps: 50000
+lr: 1e-3
+n_eval_steps: 200
+
+task_config:
+  task_name: induction_head
+
+C: 100
+n_mask_samples: 1
+target_module_patterns: [
+  "blocks.*.attn.q_proj",
+  "blocks.*.attn.k_proj",
+  "blocks.*.attn.v_proj",
+  "blocks.*.attn.out_proj",
+]
+
+faithfulness_coeff: 1.0
+recon_coeff: null
+stochastic_recon_coeff: 1
+recon_layerwise_coeff: null
+stochastic_recon_layerwise_coeff: 1
+importance_minimality_coeff: 1e-3
+pnorm: 0.1
+output_loss_type: kl
+n_ci_mlp_neurons: 16
+
+
+# --- Logging & Saving ---
+image_freq: 500
+image_on_first_step: true
+print_freq: 100
+save_freq: null
+
+pretrained_model_class: spd.experiments.ih.models.InductionTransformer
