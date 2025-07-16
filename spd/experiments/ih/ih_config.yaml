@@ -5,9 +5,9 @@ pretrained_model_path: wandb:induction-heads/runs/pdulsm0r
 
 seed: 0
 
-batch_size: 512
-steps: 50000
-lr: 1e-3
+batch_size: 16
+steps: 100000
+lr: 1e-4
 n_eval_steps: 200
 
 task_config:
@@ -39,4 +39,4 @@ image_on_first_step: true
 print_freq: 100
 save_freq: null
 
-pretrained_model_class: spd.experiments.ih.models.InductionTransformer
+pretrained_model_class: spd.experiments.ih.model.InductionTransformer
