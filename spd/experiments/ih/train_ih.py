@@ -79,7 +79,7 @@ def train(
     lr: float,
     weight_decay: float,
     lr_schedule: Literal["linear", "cosine", "constant"],
-) -> list[float]:
+) -> tuple[list[float], list[int]]:
     hooks = []
 
     if lr_schedule == "linear":
@@ -91,6 +91,7 @@ def train(
 
     opt = torch.optim.AdamW(list(model.parameters()), lr=lr, weight_decay=weight_decay)
     losses = []
+    loss_steps = []
 
     data_iter = iter(dataloader)
     with trange(steps, ncols=0) as t:
@@ -106,7 +107,6 @@ def train(
                 out[:, -1, :],
                 labels,
             )
-            losses.append(loss.detach().cpu().item())
             loss.backward()
             opt.step()
 
@@ -116,6 +116,8 @@ def train(
                     h(hook_data)
             if step % print_freq == 0 or (step + 1 == steps):
                 tqdm.write(f"Step {step} Loss: {loss.item()}")
+                loss_steps.append(step)
+                losses.append(loss.item())
                 t.set_postfix(
                     loss=loss.item(),
                     lr=step_lr,
@@ -123,7 +125,7 @@ def train(
                 if log_wandb:
                     wandb.log({"loss": loss.item(), "lr": step_lr}, step=step)
 
-    return losses
+    return losses, loss_steps
 
 
 def get_model_and_dataloader(
@@ -171,7 +173,7 @@ def run_train(config: InductionHeadsTrainConfig, device: str) -> None:
         wandb.save(str(config_path), base_path=out_dir, policy="now")
     logger.info(f"Saved config to {config_path}")
 
-    loss_curve = train(
+    losses, loss_steps = train(
         model=model,
         dataloader=dataloader,
         log_wandb=False,
@@ -183,7 +185,8 @@ def run_train(config: InductionHeadsTrainConfig, device: str) -> None:
     )
 
     plot_loss_curve(
-        losses=loss_curve,
+        losses=losses,
+        steps=loss_steps,
         out_dir=out_dir,
     )
 
@@ -203,11 +206,12 @@ def run_train(config: InductionHeadsTrainConfig, device: str) -> None:
 
 def plot_loss_curve(
     losses: list[float],
+    steps: list[int],
     out_dir: Path,
 ) -> None:
     # Plot the loss curve
     plt.figure(figsize=(10, 5))
-    plt.plot(losses, label="Training Loss")
+    plt.plot(steps, losses, label="Training Loss", color="blue")
     plt.xlabel("Steps")
     plt.ylabel("Loss")
     plt.title("Training Loss Curve")
