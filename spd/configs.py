@@ -1,6 +1,6 @@
 """Config classes of various types"""
 
-from typing import Any, ClassVar, Literal, Self
+from typing import Any, ClassVar, Literal, Self, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -10,31 +10,42 @@ from pydantic import (
     NonNegativeInt,
     PositiveFloat,
     PositiveInt,
+    field_validator,
     model_validator,
 )
 
 from spd.log import logger
 from spd.spd_types import ModelPath, Probability
 
+TaskName: TypeAlias = Literal[
+    "induction_head",
+    "tms",
+    "residual_mlp",
+    "lm",
+]
 
-class IHTaskConfig(BaseModel):
+
+class TaskConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
-    task_name: Literal["induction_head"] = Field(
-        default="induction_head",
-        description="Task identifier for induction head training",
-    )
+
+    @field_validator("task_name", mode="after", check_fields=False)
+    def validate_task_name(cls, task_name: TaskName) -> TaskName:
+        """Ensure that the task_name is a valid TaskName."""
+        if task_name not in TaskName.__args__:
+            raise ValueError(f"Invalid task_name: {task_name}. Must be one of {TaskName.__args__}.")
+        return task_name
+
+
+class IHTaskConfig(TaskConfig):
+    task_name: Literal["induction_head"]
     prefix_window: PositiveInt = Field(
         default=10,
         description="Number of tokens to use as a prefix window for the induction head",
     )
 
 
-class TMSTaskConfig(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
-    task_name: Literal["tms"] = Field(
-        default="tms",
-        description="Task identifier for TMS",
-    )
+class TMSTaskConfig(TaskConfig):
+    task_name: Literal["tms"]
     feature_probability: Probability = Field(
         ...,
         description="Probability that a given feature is active in generated data",
@@ -45,12 +56,8 @@ class TMSTaskConfig(BaseModel):
     )
 
 
-class ResidualMLPTaskConfig(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
-    task_name: Literal["residual_mlp"] = Field(
-        default="residual_mlp",
-        description="Identifier for the residual-MLP decomposition task",
-    )
+class ResidualMLPTaskConfig(TaskConfig):
+    task_name: Literal["residual_mlp"]
     feature_probability: Probability = Field(
         ...,
         description="Probability that a given feature is active in generated data",
@@ -63,12 +70,8 @@ class ResidualMLPTaskConfig(BaseModel):
     )
 
 
-class LMTaskConfig(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
-    task_name: Literal["lm"] = Field(
-        default="lm",
-        description="Identifier for the language-model decomposition task",
-    )
+class LMTaskConfig(TaskConfig):
+    task_name: Literal["lm"]
     max_seq_len: PositiveInt = Field(
         default=512,
         description="Maximum sequence length to truncate or pad inputs to",
