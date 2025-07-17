@@ -17,26 +17,8 @@ from pydantic import (
 from spd.log import logger
 from spd.spd_types import ModelPath, Probability
 
-TaskName: TypeAlias = Literal[
-    "induction_head",
-    "tms",
-    "residual_mlp",
-    "lm",
-]
 
-
-class TaskConfig(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
-
-    @field_validator("task_name", mode="after", check_fields=False)
-    def validate_task_name(cls, task_name: TaskName) -> TaskName:
-        """Ensure that the task_name is a valid TaskName."""
-        if task_name not in TaskName.__args__:
-            raise ValueError(f"Invalid task_name: {task_name}. Must be one of {TaskName.__args__}.")
-        return task_name
-
-
-class IHTaskConfig(TaskConfig):
+class IHTaskConfig(BaseModel):
     task_name: Literal["induction_head"]
     prefix_window: PositiveInt = Field(
         default=10,
@@ -44,7 +26,7 @@ class IHTaskConfig(TaskConfig):
     )
 
 
-class TMSTaskConfig(TaskConfig):
+class TMSTaskConfig(BaseModel):
     task_name: Literal["tms"]
     feature_probability: Probability = Field(
         ...,
@@ -56,7 +38,7 @@ class TMSTaskConfig(TaskConfig):
     )
 
 
-class ResidualMLPTaskConfig(TaskConfig):
+class ResidualMLPTaskConfig(BaseModel):
     task_name: Literal["residual_mlp"]
     feature_probability: Probability = Field(
         ...,
@@ -70,7 +52,7 @@ class ResidualMLPTaskConfig(TaskConfig):
     )
 
 
-class LMTaskConfig(TaskConfig):
+class LMTaskConfig(BaseModel):
     task_name: Literal["lm"]
     max_seq_len: PositiveInt = Field(
         default=512,
@@ -96,6 +78,9 @@ class LMTaskConfig(TaskConfig):
         default="test",
         description="Name of the dataset split used for evaluation",
     )
+
+
+TaskConfig: TypeAlias = TMSTaskConfig | ResidualMLPTaskConfig | LMTaskConfig | IHTaskConfig
 
 
 class Config(BaseModel):
@@ -258,7 +243,7 @@ class Config(BaseModel):
     )
 
     # --- Task Specific ---
-    task_config: TMSTaskConfig | ResidualMLPTaskConfig | LMTaskConfig | IHTaskConfig = Field(
+    task_config: TaskConfig = Field(
         ...,
         discriminator="task_name",
         description="Nested task-specific configuration selected by the `task_name` discriminator",
