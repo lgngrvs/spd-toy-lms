@@ -227,7 +227,8 @@ class InductionTransformer(nn.Module):
             ]
         )
 
-        self.ln_f = nn.LayerNorm(cfg.d_model)
+        if self.config.use_layer_norm:
+            self.ln_f = nn.LayerNorm(cfg.d_model)
         self.unembed = nn.Linear(cfg.d_model, adjusted_vocab_size, bias=False)
 
     @override
@@ -237,7 +238,8 @@ class InductionTransformer(nn.Module):
         for block in self.blocks:
             x = block(x)
 
-        x = self.ln_f(x)
+        if self.config.use_layer_norm:
+            x = self.ln_f(x)
         logits = self.unembed(x)
         return logits
 
