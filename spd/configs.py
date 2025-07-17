@@ -10,7 +10,6 @@ from pydantic import (
     NonNegativeInt,
     PositiveFloat,
     PositiveInt,
-    field_validator,
     model_validator,
 )
 
