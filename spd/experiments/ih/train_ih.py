@@ -3,8 +3,9 @@ r""" """
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Callable
 
 import numpy as np
 import torch
@@ -30,6 +31,7 @@ class InductionHeadsTrainConfig(BaseModel):
     steps: PositiveInt
     batch_size: PositiveInt
     lr: float
+    lr_warmup: int | float
     weight_decay: float
     lr_schedule: Literal["cosine", "constant", "linear"] = "linear"
     seed: int = 0
@@ -70,6 +72,15 @@ def cosine_decay_lr(step: int, steps: int) -> float:
     return np.cos(0.5 * np.pi * step / (steps - 1))
 
 
+def warmup_lr(
+    step: int, steps: int, lr_fn: Callable[[int, int], float], warmup_steps: int
+) -> float:
+    if step < warmup_steps:
+        return step / warmup_steps
+    else:
+        return lr_fn(step - warmup_steps, steps - warmup_steps)
+
+
 def train(
     model: InductionTransformer,
     dataloader: DatasetGeneratedDataLoader[tuple[torch.Tensor, torch.Tensor]],
@@ -79,6 +90,7 @@ def train(
     lr: float,
     weight_decay: float,
     lr_schedule: Literal["linear", "cosine", "constant"],
+    lr_warmup: int | float,
 ) -> tuple[list[float], list[int]]:
     hooks = []
 
@@ -88,6 +100,13 @@ def train(
         lr_schedule_fn = cosine_decay_lr
     elif lr_schedule == "constant":
         lr_schedule_fn = constant_lr
+
+    if lr_warmup > 0:
+        if isinstance(lr_warmup, int):
+            warmup_steps = lr_warmup
+        else:
+            warmup_steps = int(lr_warmup * steps)
+        lr_schedule_fn = partial(warmup_lr, warmup_steps=warmup_steps, lr_fn=lr_schedule_fn)
 
     opt = torch.optim.AdamW(list(model.parameters()), lr=lr, weight_decay=weight_decay)
     losses = []
@@ -182,6 +201,7 @@ def run_train(config: InductionHeadsTrainConfig, device: str) -> None:
         lr=config.lr,
         weight_decay=config.weight_decay,
         lr_schedule=config.lr_schedule,
+        lr_warmup=config.lr_warmup,
     )
 
     plot_loss_curve(
@@ -266,11 +286,11 @@ if __name__ == "__main__":
     # pair is guaranteed to land within.
     # We need 4 "spots" for the induction pair,
     # and 1 spot for the BOS token.
-    prefix_window = 64 - 5
+    prefix_window = seq_length - 3
     device = "cuda" if torch.cuda.is_available() else "cpu"
     config = InductionHeadsTrainConfig(
         ih_model_config=InductionModelConfig(
-            vocab_size=16,
+            vocab_size=128,
             seq_len=seq_length,
             d_model=64,
             n_heads=1,
@@ -281,14 +301,15 @@ if __name__ == "__main__":
             use_pos_encoding=True,
         ),
         wandb_project="induction_heads",
-        steps=150000,
-        batch_size=8,
-        lr=0.001,
+        steps=50000,
+        batch_size=1024,
+        lr=1e-3,
         weight_decay=0.01,
         lr_schedule="constant",
         seed=42,
         attention_maps_n_steps=100,
         prefix_window=prefix_window,
+        lr_warmup=1000,
     )
 
     set_seed(config.seed)

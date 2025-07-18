@@ -78,7 +78,7 @@ class InductionDataset(
         self.size = size
         self.induction_token = vocab_size + 1  # One additional token for the induction token
         self.device = device
-        assert self.prefix_window < seq_len - 4, "S M … S M must fit."
+        assert self.prefix_window < seq_len - 2, "S M … S M must fit."
 
     def __len__(self) -> int:
         return 2**31
