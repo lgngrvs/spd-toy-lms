@@ -43,13 +43,13 @@ def save_target_model_info(
     induction_model: InductionTransformer,
     induction_model_train_config_dict: dict[str, Any],
 ) -> None:
-    save_file(induction_model.state_dict(), out_dir / "induction_model.pth")
-    save_file(induction_model_train_config_dict, out_dir / "induction_model_train_config.yaml")
+    save_file(induction_model.state_dict(), out_dir / "ih.pth")
+    save_file(induction_model_train_config_dict, out_dir / "ih_train_config.yaml")
 
     if save_to_wandb:
-        wandb.save(str(out_dir / "induction_model.pth"), base_path=out_dir, policy="now")
+        wandb.save(str(out_dir / "ih.pth"), base_path=out_dir, policy="now")
         wandb.save(
-            str(out_dir / "induction_model_train_config.yaml"), base_path=out_dir, policy="now"
+            str(out_dir / "ih_train_config.yaml"), base_path=out_dir, policy="now"
         )
 
 
