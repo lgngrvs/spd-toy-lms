@@ -8,11 +8,14 @@ from spd.utils.data_utils import TrigramDataset
 # from spd.log import logger
 # from spd.utils.general_utils import set_seed
 
+vocab_size = 20
+seq_len = 15
 
 dataset = TrigramDataset(
-    20, 15, "cpu", n_trigrams=3, min_skip_distance=1, max_skip_distance=2, size=100
+    vocab_size, seq_len, "cpu", n_trigrams=3, min_skip_distance=1, max_skip_distance=8, size=100
 )
 
 batch = dataset.generate_batch(batch_size=20)
+print(batch[0])
 print(batch[1])
-print(dataset.trigram_first, dataset.trigram_second, dataset.trigram_third)
+print(dataset.trigram_firsts, dataset.trigram_seconds, dataset.trigram_thirds)
