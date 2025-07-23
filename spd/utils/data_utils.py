@@ -134,36 +134,31 @@ class TrigramDataset(
         n_trigrams: int = 10,
         min_skip_distance: int = 1,
         max_skip_distance: int = 10,
-        size: int = 100_000,
     ):
         self.vocab_size = vocab_size
         self.seq_len = seq_len
         self.n_trigrams = n_trigrams
         self.min_skip_distance = min_skip_distance
         self.max_skip_distance = max_skip_distance
-        self.size = size
         self.device = device
 
-        self.rand_tokens_start = 3 * self.n_trigrams
-        self.rand_tokens_end = vocab_size
-
         # Randomly choose trigrams from the vocabulary. Each trigram is unique for simplicity's sake
-        trigram_choices = torch.randperm(vocab_size)[: n_trigrams * 3]
+        trigram_choices = torch.randperm(vocab_size)[1 : n_trigrams * 3 + 1]
         self.trigram_firsts = trigram_choices[:n_trigrams]
         self.trigram_seconds = trigram_choices[n_trigrams : 2 * n_trigrams]
         self.trigram_thirds = trigram_choices[2 * n_trigrams : 3 * n_trigrams]
 
         # Create list of the tokens not selected from vocab, to be used as fillers/random tokens
-        all_indices = set(range(vocab_size))
+        all_indices = set(range(1, vocab_size + 1))
         selected_indices = set(trigram_choices.tolist())
         self.filler_tokens = torch.tensor(list(all_indices - selected_indices))
 
     @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
     def generate_batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor]:
-        # Pregenerate sequences tensor
-        tensor_size = batch_size * self.seq_len
+        # Pregenerate tokens tensor; -1 for BOS
+        tensor_size = batch_size * (self.seq_len - 1)
         rand_indices = torch.randint(0, len(self.filler_tokens), (tensor_size,))
-        sequences = self.filler_tokens[rand_indices].reshape((batch_size, self.seq_len))
+        tokens = self.filler_tokens[rand_indices].reshape((batch_size, self.seq_len - 1))
 
         # Choose trigrams from the list of trigrams randomly
         chosen_trigrams = torch.randint(0, self.n_trigrams, (batch_size,))
@@ -171,16 +166,27 @@ class TrigramDataset(
         batch_second_tokens = self.trigram_seconds[chosen_trigrams]
         batch_third_tokens = self.trigram_thirds[chosen_trigrams]
 
+        # Skip distances should be distance from the end, not from the start.
+        # Skip distance 0 should skip 0 tokens, i.e. AB(C); A thus indexed by seq[-2]
         skip_distances = torch.randint(
-            self.min_skip_distance, self.max_skip_distance, (batch_size,)
+            (-1 * self.max_skip_distance) - 2, (-1 * self.min_skip_distance) - 2, (batch_size,)
         )
 
-        # Replace tokens
-        sequences[:, -1] = batch_second_tokens
+        # Replace random tokens with trigram tokens
+        tokens[:, -1] = batch_second_tokens
         row_indices = torch.arange(len(skip_distances))
-        sequences[row_indices, skip_distances] = batch_first_tokens
+        tokens[row_indices, skip_distances] = batch_first_tokens
 
-        return sequences, batch_third_tokens
+        # Insert BOS token
+        tokens = torch.cat(
+            (
+                torch.zeros((batch_size, 1), dtype=torch.long),  # BOS token
+                tokens,
+            ),
+            dim=1,
+        )
+
+        return tokens, batch_third_tokens
 
 
 DataGenerationType = Literal[
