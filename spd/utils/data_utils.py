@@ -124,6 +124,7 @@ class TrigramDataset(
     Generates data with skip-trigram patterns like ATTTTBCTTTXYZCTTT
     where T is a random token, A...BC and X...YZ are trigram relationships
     with BC and YZ being adjacent tokens.
+
     """
 
     def __init__(
@@ -163,9 +164,10 @@ class TrigramDataset(
                 self.trigram_third[i] = torch.randint(
                     vocab_start, vocab_end, (1,), dtype=torch.long
                 )
-        assert seq_len >= max_skip_distance + 4, (
-            "Sequence must be long enough for skip-trigrams (BOS + A + skip + BC)"
-        )
+
+        # assert seq_len >= max_skip_distance + 4, (
+        #   "Sequence must be long enough for skip-trigrams (BOS + A + skip + BC)"
+        # )
 
     def __len__(self) -> int:
         return self.size
@@ -186,8 +188,8 @@ class TrigramDataset(
         sequences = []
 
         for i in range(batch_size):
+            # UNNECESSARY, SHOULD JUST BE SKIP_DISTANCE
             # Generate skip distance between A and BC
-            #
             skip_distance: int = cast(
                 int, torch.randint(self.min_skip_distance, self.max_skip_distance + 1, (1,)).item()
             )
@@ -195,9 +197,7 @@ class TrigramDataset(
             # Calculate how many tokens we can put before A
             trigram_part_length = 1 + skip_distance + 2  # A + skip + BC
             remaining_length = self.seq_len - 1 - trigram_part_length  # -1 for BOS
-
-            prefix_length: int = cast(int, torch.randint(0, (remaining_length + 1), (1,)).item())
-            suffix_length = remaining_length - prefix_length
+            prefix_length = remaining_length
 
             # Create the sequence parts
             sequence_parts = []
@@ -235,16 +235,11 @@ class TrigramDataset(
                 sequence_parts.append(skip_tokens)
 
             # BC tokens (adjacent)
-            sequence_parts.append(torch.stack([second_tokens[i], third_tokens[i]]))
-
-            # Suffix (random tokens after BC)
-            if suffix_length > 0:
-                suffix = torch.randint(vocab_start, vocab_end, (suffix_length,), dtype=torch.long)
-                # Ensure suffix tokens are different from trigram tokens
-                for j in range(suffix_length):
-                    while suffix[j].item() in trigram_tokens:
-                        suffix[j] = torch.randint(vocab_start, vocab_end, (1,), dtype=torch.long)
-                sequence_parts.append(suffix)
+            sequence_parts.append(
+                second_tokens[i].reshape(
+                    1,
+                )
+            )
 
             # Concatenate all parts
             sequence = torch.cat(sequence_parts, dim=0)

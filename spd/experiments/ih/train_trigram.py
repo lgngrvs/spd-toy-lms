@@ -10,10 +10,9 @@ from spd.utils.data_utils import TrigramDataset
 
 
 dataset = TrigramDataset(
-    10, 15, "cpu", n_trigrams=3, min_skip_distance=1, max_skip_distance=2, size=100
+    20, 15, "cpu", n_trigrams=3, min_skip_distance=1, max_skip_distance=2, size=100
 )
 
-batch = dataset.generate_batch(batch_size=10)
-print(batch[0])
+batch = dataset.generate_batch(batch_size=20)
 print(batch[1])
 print(dataset.trigram_first, dataset.trigram_second, dataset.trigram_third)
