@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from typing import Generic, Literal, TypeVar, override
+from typing import Generic, Literal, TypeVar, cast, override
 
 import torch
 from jaxtyping import Float
@@ -110,6 +110,160 @@ class InductionDataset(
 
         # Label is the memorised token that appears twice
         return tokens.to(self.device), memorised_token.to(self.device).squeeze(-1)
+
+
+class TrigramDataset(
+    Dataset[
+        tuple[
+            Float[Tensor, "batch seq_len"],
+            Float[Tensor, "batch 1"],
+        ]
+    ]
+):
+    """
+    Generates data with skip-trigram patterns like ATTTTBCTTTXYZCTTT
+    where T is a random token, A...BC and X...YZ are trigram relationships
+    with BC and YZ being adjacent tokens.
+    """
+
+    def __init__(
+        self,
+        vocab_size: int,
+        seq_len: int,
+        device: str | torch.device,
+        n_trigrams: int = 10,
+        min_skip_distance: int = 3,
+        max_skip_distance: int = 10,
+        size: int = 100_000,
+    ):
+        self.vocab_size = vocab_size
+        self.seq_len = seq_len
+        self.n_trigrams = n_trigrams
+        self.min_skip_distance = min_skip_distance
+        self.max_skip_distance = max_skip_distance
+        self.size = size
+        self.device = device
+
+        vocab_start = 1  # 0 is reserved for BOS
+        vocab_end = self.vocab_size + vocab_start
+        # creates 3 x n_trigrams matrix
+
+        # Pre-generate n_trigrams trigram relationships: (A, B) -> C
+        self.trigram_first = torch.randint(vocab_start, vocab_end, (n_trigrams,), dtype=torch.long)
+        self.trigram_second = torch.randint(vocab_start, vocab_end, (n_trigrams,), dtype=torch.long)
+        self.trigram_third = torch.randint(vocab_start, vocab_end, (n_trigrams,), dtype=torch.long)
+
+        # Ensure trigram tokens are distinct within each trigram
+        for i in range(n_trigrams):
+            while self.trigram_second[i] == self.trigram_first[i]:
+                self.trigram_second[i] = torch.randint(
+                    vocab_start, vocab_end, (1,), dtype=torch.long
+                )
+            while self.trigram_third[i] in [self.trigram_first[i], self.trigram_second[i]]:
+                self.trigram_third[i] = torch.randint(
+                    vocab_start, vocab_end, (1,), dtype=torch.long
+                )
+        assert seq_len >= max_skip_distance + 4, (
+            "Sequence must be long enough for skip-trigrams (BOS + A + skip + BC)"
+        )
+
+    def __len__(self) -> int:
+        return self.size
+
+    @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
+    def generate_batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor]:
+        vocab_start = 1  # 0 is reserved for BOS
+        vocab_end = self.vocab_size + vocab_start
+
+        # Choose random trigrams for each sequence in the batch
+        chosen_trigrams = torch.randint(0, self.n_trigrams, (batch_size,), dtype=torch.long)
+
+        # Get the trigram tokens for each sequence
+        first_tokens = self.trigram_first[chosen_trigrams]
+        second_tokens = self.trigram_second[chosen_trigrams]
+        third_tokens = self.trigram_third[chosen_trigrams]
+
+        sequences = []
+
+        for i in range(batch_size):
+            # Generate skip distance between A and BC
+            #
+            skip_distance: int = cast(
+                int, torch.randint(self.min_skip_distance, self.max_skip_distance + 1, (1,)).item()
+            )
+
+            # Calculate how many tokens we can put before A
+            trigram_part_length = 1 + skip_distance + 2  # A + skip + BC
+            remaining_length = self.seq_len - 1 - trigram_part_length  # -1 for BOS
+
+            prefix_length: int = cast(int, torch.randint(0, (remaining_length + 1), (1,)).item())
+            suffix_length = remaining_length - prefix_length
+
+            # Create the sequence parts
+            sequence_parts = []
+
+            # Generate trigram tokens set for exclusion
+            trigram_tokens = {
+                first_tokens[i].item(),
+                second_tokens[i].item(),
+                third_tokens[i].item(),
+            }
+
+            # Prefix (random tokens before A)
+            if prefix_length > 0:
+                prefix = torch.randint(vocab_start, vocab_end, (prefix_length,), dtype=torch.long)
+                # Ensure prefix tokens are different from trigram tokens
+                for j in range(prefix_length):
+                    while prefix[j].item() in trigram_tokens:
+                        prefix[j] = torch.randint(vocab_start, vocab_end, (1,), dtype=torch.long)
+                sequence_parts.append(prefix)
+
+            # A token
+            sequence_parts.append(first_tokens[i : i + 1])
+
+            # Skip tokens between A and BC
+            if skip_distance > 0:
+                skip_tokens = torch.randint(
+                    vocab_start, vocab_end, (skip_distance,), dtype=torch.long
+                )
+                # Ensure skip tokens are different from trigram tokens
+                for j in range(skip_distance):
+                    while skip_tokens[j].item() in trigram_tokens:
+                        skip_tokens[j] = torch.randint(
+                            vocab_start, vocab_end, (1,), dtype=torch.long
+                        )
+                sequence_parts.append(skip_tokens)
+
+            # BC tokens (adjacent)
+            sequence_parts.append(torch.stack([second_tokens[i], third_tokens[i]]))
+
+            # Suffix (random tokens after BC)
+            if suffix_length > 0:
+                suffix = torch.randint(vocab_start, vocab_end, (suffix_length,), dtype=torch.long)
+                # Ensure suffix tokens are different from trigram tokens
+                for j in range(suffix_length):
+                    while suffix[j].item() in trigram_tokens:
+                        suffix[j] = torch.randint(vocab_start, vocab_end, (1,), dtype=torch.long)
+                sequence_parts.append(suffix)
+
+            # Concatenate all parts
+            sequence = torch.cat(sequence_parts, dim=0)
+            sequences.append(sequence)
+
+        # Stack all sequences
+        tokens = torch.stack(sequences, dim=0)
+
+        # Add BOS token at the beginning
+        tokens = torch.cat(
+            (
+                torch.zeros((batch_size, 1), dtype=torch.long),  # BOS token
+                tokens,
+            ),
+            dim=1,
+        )
+
+        # Label is the third token of the trigram (the predicted token)
+        return tokens.to(self.device), third_tokens.to(self.device)
 
 
 DataGenerationType = Literal[
@@ -245,34 +399,3 @@ class SparseFeatureDataset(
         )
         mask = torch.rand_like(batch) < self.feature_probability
         return batch * mask
-
-    def _generate_multi_feature_batch_no_zero_samples(
-        self, batch_size: int, buffer_ratio: float
-    ) -> Float[Tensor, "batch n_features"]:
-        """Generate a batch where each feature activates independently with probability
-        `feature_probability`.
-
-        Ensures that there are no zero samples in the batch.
-
-        Args:
-            batch_size: Number of samples in the batch
-            buffer_ratio: First generate `buffer_ratio * batch_size` samples and count the
-                number of samples with all zeros. Then generate another `buffer_ratio *
-                n_zeros` samples and fill in the zero samples. Continue until there are no zero
-                samples.
-        """
-        buffer_size = int(batch_size * buffer_ratio)
-        batch = torch.empty(0, device=self.device, dtype=torch.float32)
-        n_samples_needed = batch_size
-        while True:
-            buffer = self._masked_batch_generator(buffer_size)
-            # Get the indices of the non-zero samples in the buffer
-            valid_indices = buffer.sum(dim=-1) != 0
-            batch = torch.cat((batch, buffer[valid_indices][:n_samples_needed]))
-            if len(batch) == batch_size:
-                break
-            else:
-                # We don't have enough valid samples
-                n_samples_needed = batch_size - len(batch)
-                buffer_size = int(n_samples_needed * buffer_ratio)
-        return batch

@@ -1,7 +1,7 @@
 wandb_project: spd-induction-heads
 wandb_run_name: null
 
-pretrained_model_path: wandb:induction-heads/runs/pdulsm0r
+pretrained_model_path: wandb:induction_heads/runs/aprdcz5c
 
 seed: 0
 
