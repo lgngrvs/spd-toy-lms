@@ -10,7 +10,6 @@ from torch import Tensor, nn
 from wandb.apis.public import Run
 
 from spd.experiments.ih.model import (
-    MultiHeadSelfAttention,
     PositionalEncoding,
     TransformerBlock,
 )
@@ -31,12 +30,10 @@ class TrigramModelPaths(BaseModel):
 
 
 class TrigramModelConfig(BaseModel):
-    attn_only: bool
     vocab_size: PositiveInt
     seq_len: PositiveInt
     d_model: PositiveInt
     n_heads: PositiveInt
-    n_layers: PositiveInt
     ff_fanout: PositiveInt
     use_ff: bool
     use_pos_encoding: bool
@@ -48,50 +45,33 @@ class TrigramTransformer(nn.Module):
     def __init__(self, cfg: TrigramModelConfig):
         super().__init__()
         self.config = cfg
-        self.attn_only = cfg.attn_only
 
         adjusted_vocab_size = cfg.vocab_size + 1  # +1 for BOS token
         self.token_embed = nn.Embedding(adjusted_vocab_size, cfg.d_model)
         self.pos = PositionalEncoding(cfg.d_model, cfg.seq_len)
 
-        if self.attn_only:
-            self.block = MultiHeadSelfAttention(
-                d_model=cfg.d_model,
-                n_heads=cfg.n_heads,
-                use_pos_encoding=cfg.use_pos_encoding,
-                max_len=cfg.seq_len,
-            )
-        else:
-            self.block = TransformerBlock(
-                d_model=cfg.d_model,
-                n_heads=cfg.n_heads,
-                ff_fanout=cfg.ff_fanout,
-                use_ff=cfg.use_ff,
-                use_pos_encoding=cfg.use_pos_encoding,
-                use_layer_norm=False,
-                max_len=cfg.seq_len,
-            )
+        self.block = TransformerBlock(
+            d_model=cfg.d_model,
+            n_heads=cfg.n_heads,
+            ff_fanout=cfg.ff_fanout,
+            use_ff=cfg.use_ff,
+            use_pos_encoding=cfg.use_pos_encoding,
+            use_layer_norm=self.config.use_ff,
+            max_len=cfg.seq_len,
+        )
 
         self.unembed = nn.Linear(cfg.d_model, adjusted_vocab_size, bias=False)
 
     @override
     def forward(self, tokens: Float[Tensor, "B S"], **_):
         x = self.token_embed(tokens)
-
-        # MHSA doesn't come with residual built-in
-        x = x + self.block(x) if self.attn_only else self.block(x)
-
+        x = self.block(x)
         logits = self.unembed(x)
         return logits
 
     def get_attention_weights(self, tokens: Float[Tensor, "B S"]):
         x = self.token_embed(tokens)
-
-        if self.attn_only:
-            attn_weights = self.block.get_attention_weights(x)
-        else:
-            attn_weights = self.block.attn.get_attention_weights(x)
-
+        attn_weights = self.block.attn.get_attention_weights(x)
         return attn_weights
 
     @staticmethod

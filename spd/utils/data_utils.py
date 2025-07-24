@@ -153,6 +153,9 @@ class TrigramDataset(
         selected_indices = set(trigram_choices.tolist())
         self.filler_tokens = torch.tensor(list(all_indices - selected_indices))
 
+    def __len__(self) -> int:
+        return 2**31
+
     @torch.no_grad()  # pyright: ignore[reportUntypedFunctionDecorator]
     def generate_batch(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor]:
         # Pregenerate tokens tensor; -1 for BOS

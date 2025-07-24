@@ -2,26 +2,47 @@ r""" """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Literal, Callable
+from typing import Literal
 
 import numpy as np
 import torch
 import wandb
 import yaml
 from matplotlib import pyplot as plt
-from pydantic import BaseModel, ConfigDict, PositiveInt
+from pydantic import BaseModel, ConfigDict, NonNegativeInt, PositiveInt
 from torch.nn import functional as F
 from tqdm import tqdm, trange
 
 from spd.experiments.ih.model import InductionModelConfig, InductionTransformer
+from spd.experiments.ih.trigram_model import TrigramTransformer
 from spd.log import logger
 from spd.utils.data_utils import DatasetGeneratedDataLoader, InductionDataset
 from spd.utils.general_utils import set_seed
 
+from .trigram_model import TrigramModelConfig
+
 wandb.require("core")
+
+
+class TrigramTrainConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)  # what does this do?
+    wandb_project: str | None = None
+    trigram_model_config: TrigramModelConfig
+    steps: PositiveInt
+    batch_size: PositiveInt
+    lr: float
+    lr_warmup: int | float
+    weight_decay: float
+    lr_schedule: Literal["cosine", "constant", "linear"] = "linear"
+    seed: int = 0
+    attention_maps_n_steps: PositiveInt
+    n_trigrams: PositiveInt
+    min_skip_distance: NonNegativeInt
+    max_skip_distance: PositiveInt
 
 
 class InductionHeadsTrainConfig(BaseModel):
@@ -82,7 +103,7 @@ def warmup_lr(
 
 
 def train(
-    model: InductionTransformer,
+    model: InductionTransformer | TrigramTransformer,
     dataloader: DatasetGeneratedDataLoader[tuple[torch.Tensor, torch.Tensor]],
     log_wandb: bool,
     steps: int,
