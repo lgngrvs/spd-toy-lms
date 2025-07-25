@@ -48,9 +48,7 @@ def save_target_model_info(
 
     if save_to_wandb:
         wandb.save(str(out_dir / "ih.pth"), base_path=out_dir, policy="now")
-        wandb.save(
-            str(out_dir / "ih_train_config.yaml"), base_path=out_dir, policy="now"
-        )
+        wandb.save(str(out_dir / "ih_train_config.yaml"), base_path=out_dir, policy="now")
 
 
 def main(
@@ -69,7 +67,7 @@ def main(
     config = load_config(config_path_or_obj, config_model=Config)
 
     if config.wandb_project:
-        tags = ["tms"]
+        tags = ["tms"]  # Maybe change to "ih"?
         if evals_id:
             tags.append(evals_id)
         if sweep_id:
