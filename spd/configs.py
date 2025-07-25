@@ -25,6 +25,19 @@ class IHTaskConfig(BaseModel):
     )
 
 
+class TrigramTaskConfig(BaseModel):
+    task_name: Literal["trigram"]
+    n_trigrams: PositiveInt = Field(
+        default=10, description="Number of different trigram relationships to establish"
+    )
+    min_skip_distance: NonNegativeInt = Field(
+        default=1, description="Minimum number of tokens between A and BC in trigram patterns"
+    )
+    max_skip_distance: PositiveInt = Field(
+        default=10, description="Maximum number of tokens between A and BC in trigram patterns"
+    )
+
+
 class TMSTaskConfig(BaseModel):
     task_name: Literal["tms"]
     feature_probability: Probability = Field(
@@ -79,7 +92,9 @@ class LMTaskConfig(BaseModel):
     )
 
 
-TaskConfig: TypeAlias = TMSTaskConfig | ResidualMLPTaskConfig | LMTaskConfig | IHTaskConfig
+TaskConfig: TypeAlias = (
+    TMSTaskConfig | ResidualMLPTaskConfig | LMTaskConfig | IHTaskConfig | TrigramTaskConfig
+)
 
 
 class Config(BaseModel):

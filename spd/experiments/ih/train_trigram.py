@@ -9,12 +9,11 @@ import wandb
 import yaml
 from matplotlib import pyplot as plt
 
+from spd.experiments.ih.train_ih import TrigramTrainConfig, plot_loss_curve, train
+from spd.experiments.ih.trigram_model import TrigramModelConfig, TrigramTransformer
 from spd.log import logger
 from spd.utils.data_utils import DatasetGeneratedDataLoader, TrigramDataset
 from spd.utils.general_utils import set_seed
-
-from .train_ih import TrigramTrainConfig, plot_loss_curve, train
-from .trigram_model import TrigramModelConfig, TrigramTransformer
 
 # Config Class
 
@@ -31,7 +30,7 @@ def get_run_name(
 ) -> str:
     """Generate a run name based on the config."""
     run_name = ""
-    run_name += f"induction_heads_v{config.trigram_model_config.vocab_size}_seq{config.trigram_model_config.seq_len}"
+    run_name += f"trigram_v{config.trigram_model_config.vocab_size}_seq{config.trigram_model_config.seq_len}"
     run_name += f"_heads{config.trigram_model_config.n_heads}_layers1"
     run_name += f"_steps{config.steps}_batch{config.batch_size}_lr{config.lr}"
     if config.trigram_model_config.use_ff:
@@ -97,9 +96,9 @@ def run_train(config: TrigramTrainConfig, device: str) -> None:
     losses, loss_steps = train(
         model=model,
         dataloader=dataloader,
-        log_wandb=False,
+        log_wandb=True,
         steps=config.steps,
-        print_freq=100,
+        print_freq=5,
         lr=config.lr,
         weight_decay=config.weight_decay,
         lr_schedule=config.lr_schedule,
@@ -147,8 +146,9 @@ def plot_attention_maps_post_training(
         max_attn_weights = eval_attention_weights.max(dim=0).values
 
         for head_index in range(model.config.n_heads):
-            avg_attn = avg_attn_weights[0, head_index, :, :].cpu().numpy()
-            max_attn = max_attn_weights[0, head_index, :, :].cpu().numpy()
+            print(avg_attn_weights.shape)
+            avg_attn = avg_attn_weights[head_index, :, :].cpu().numpy()
+            max_attn = max_attn_weights[head_index, :, :].cpu().numpy()
 
             fig, ax = plt.subplots(1, 2, figsize=(12, 6))
             assert isinstance(ax, np.ndarray), "Expected ax to be a numpy array of axes"
@@ -169,18 +169,18 @@ if __name__ == "__main__":
 
     config = TrigramTrainConfig(
         trigram_model_config=TrigramModelConfig(
-            vocab_size=128,
-            seq_len=64,
-            d_model=64,
-            n_heads=1,
+            vocab_size=40,
+            seq_len=20,
+            d_model=16,
+            n_heads=4,
             ff_fanout=4,
             use_ff=False,
             use_pos_encoding=True,
             device="cpu",
         ),
-        wandb_project="trigrams",
-        steps=50000,
-        batch_size=1024,
+        wandb_project="trigram",
+        steps=5000,
+        batch_size=512,
         lr=1e-3,
         lr_schedule="constant",
         lr_warmup=1000,
