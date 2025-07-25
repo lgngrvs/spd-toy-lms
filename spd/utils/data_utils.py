@@ -131,22 +131,58 @@ class TrigramDataset(
         vocab_size: int,
         seq_len: int,
         device: str | torch.device,
-        n_trigrams: int = 10,
+        # changed
+        n_b_tokens: int = 5,
+        n_pairs_per_b: int = 5,
         min_skip_distance: int = 1,
         max_skip_distance: int = 10,
     ):
         self.vocab_size = vocab_size
         self.seq_len = seq_len
-        self.n_trigrams = n_trigrams
         self.min_skip_distance = min_skip_distance
         self.max_skip_distance = max_skip_distance
         self.device = device
+        self.n_trigrams = n_b_tokens * n_pairs_per_b
 
-        # Randomly choose trigrams from the vocabulary. Each trigram is unique for simplicity's sake
-        trigram_choices = torch.randperm(vocab_size)[1 : n_trigrams * 3 + 1]
-        self.trigram_firsts = trigram_choices[:n_trigrams]
-        self.trigram_seconds = trigram_choices[n_trigrams : 2 * n_trigrams]
-        self.trigram_thirds = trigram_choices[2 * n_trigrams : 3 * n_trigrams]
+        # Randomly choose n_b_tokens + 2 * n_pairs_per_b from the vocab
+        # vocab_size-1 so that you can add 1 to not include 0.
+        trigram_choices = (torch.randperm(vocab_size - 1) + 1)[: n_b_tokens + 2 * n_pairs_per_b]
+
+        self.b_s = trigram_choices[:n_b_tokens]
+        self.a_s = trigram_choices[n_b_tokens : n_b_tokens + n_pairs_per_b]
+        self.c_s = trigram_choices[n_b_tokens + n_pairs_per_b : n_b_tokens + 2 * n_pairs_per_b]
+
+        # We want to create trigrams like (A1, B, C3), (A2, B, C1), (A3, B, C2) for each B token.
+        # Reusing the A and C tokens randomly prevents the model from 'cheating'.
+        # Below code generates and stores these pairings. For the above example, it would look like
+        # tg_first = [A1, A2, A3, A1, ...], tg_second = [B1, B1, B1, ...], tg_third = [C3, C1, C2, ...]
+        # With "..." indicating you'd repeat the pattern for B2, B3, etc
+        # tg_third provides the randomness via random permutation.
+
+        # For example:
+        # tg_first = ([12, 13, 19, 11, 10, 11, 12, 13, 10, 19, 19, 11, 13, 12, 10])
+        # tg_second = ([17, 17, 17, 17, 17, 16, 16, 16, 16, 16,  8,  8,  8,  8,  8])
+        # tg_third = ([ 6,  2,  5,  3, 15,  6,  2,  5,  3, 15,  6,  2,  5,  3, 15])
+
+        # Copies the B tokens using torch.repeat_interleave
+        # E.g. [B1, ..., B1, B2, ..., B2, B3, ...]
+        self.trigram_seconds = torch.repeat_interleave(self.b_s, n_pairs_per_b)
+
+        # Randomness is provided by the C tokens
+        # E.g. [A1, A2, A3, A1, A2, ...]
+        self.trigram_thirds = torch.cat(
+            [self.a_s for _ in range(n_b_tokens)],
+            dim=0,
+        )
+
+        # Copies the items of c_s and permutes them randomly to assign to A tokens
+        self.trigram_firsts = torch.cat(
+            [self.c_s[torch.randperm(self.c_s.size(0))] for _ in range(n_b_tokens)],
+            dim=0,
+        )
+
+        print(self.trigram_firsts, self.trigram_seconds, self.trigram_thirds)
+        assert self.n_trigrams == len(self.trigram_seconds), "bruh"
 
         # Create list of the tokens not selected from vocab, to be used as fillers/random tokens
         all_indices = set(range(1, vocab_size + 1))
